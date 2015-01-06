@@ -6,6 +6,7 @@ import zipfile, tarfile
 import subprocess
 import argparse
 import logging
+import shutil
 
 CONFIG = {
     'SimsPerJob' : '5',
@@ -22,9 +23,9 @@ output=Scratch\\\\sim$(Process).out
 error=Scratch\\\\sim$(Process).err
 log=Scratch\\\\sim$(Process).log
 requirements=(Memory >= 512) && (TARGET.Arch == "X86_64") && (TARGET.OpSys == "WINDOWS")
-transfer_input_files=Scratch\job$(Process).zip, Graple\Graple.py
-transfer_output_files=Results.zip
-transfer_output_remaps="Results.zip=Scratch\\\\Results$(Process).zip"
+transfer_input_files=Scratch\job$(Process).bz2.tar, Graple\Graple.py
+transfer_output_files=Results.bz2.tar
+transfer_output_remaps="Results.bz2.tar=Results\\\\Results$(Process).bz2.tar"
 should_transfer_files=YES
 when_to_transfer_output=ON_EXIT
 notification=never'''
@@ -44,6 +45,7 @@ class Graple:
         self.SimsDir = 'Sims'
         self.CondorDir = 'Condor'
         self.TempDir = 'Scratch'
+        self.ResultsDir = 'Results'
 
         self.ZipBasename = join(self.top_dir, self.TempDir)
         #if not isdir(self.ZipBasename):
@@ -111,6 +113,9 @@ class Graple:
         if not isdir(self.SimsDir):
             os.mkdir(self.SimsDir)
 
+        if not isdir(self.ResultsDir):
+            os.mkdir(self.ResultsDir)
+
         os.chdir(self.SimsDir)
         for i in range(NumSims):
             if not isdir('Sim' + str(i)):
@@ -143,12 +148,12 @@ class Graple:
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
             if count % int(CONFIG['SimsPerJob']) == 0:
-                jn = self.ZipBasename + str(jobSuffix) + '.zip'
+                jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
                 jobSuffix += 1
                 self.CreateJob(SimsForJob, jn)  
                 SimsForJob = []
         if len(SimsForJob) > 0:
-            jn = self.ZipBasename + str(jobSuffix) + '.zip'
+            jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
             jobSuffix += 1
             self.CreateJob(SimsForJob, jn)
             SimsForJob = []
@@ -173,7 +178,7 @@ class Graple:
         rscript = join(join(topdir, 'Scripts'), CONFIG['Rmain'])
               
         for JobName in listdir('.'):
-            if isfile(JobName) and JobName.endswith('.zip'):
+            if isfile(JobName) and JobName.endswith('.bz2.tar'):
                 with tarfile.open(JobName, 'r') as tar:
                     tar.extractall()
                 break
@@ -186,7 +191,7 @@ class Graple:
                 #res = subprocess.call([rexe, rscript])
                 os.chdir(topdir)
         
-        with tarfile.open('Results.zip', 'w') as tar:
+        with tarfile.open('Results.bz2.tar', 'w') as tar:
             for d in listdir('Sims'):
                 #resultsdir = join(join(join(topdir, 'Sims'), d), 'Results')
                 resultsdir = join(join('Sims', d), 'Results')
@@ -195,13 +200,16 @@ class Graple:
 
 
     def SimFixup(self,):
-        ## Unpacks the result archives on the client side.
-        os.chdir(join(self.top_dir, 'Scratch'))
+        ## Unpacks the result archives on the client side and cleans 
+        ## up unused directories.
+        os.chdir(join(self.top_dir, self.ResultsDir))
         for f in listdir('.'):
-            if f.endswith('.zip'):
+            if f.endswith('.bz2.tar'):
                 with tarfile.open(f, 'r') as tar:
                     tar.extractall()
-
+                os.remove(f)
+        shutil.rmtree(join(self.top_dir, self.TempDir))
+        shutil.rmtree(join(self.top_dir, self.CondorDir))
 
 if __name__ == '__main__':
     sm = Graple()

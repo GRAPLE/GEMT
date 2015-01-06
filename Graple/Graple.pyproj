@@ -30,9 +30,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="FixupResults.py" />
+    <Compile Include="ProcessGrapleBatchOutputs.py" />
     <Compile Include="Graple.py" />
-    <Compile Include="SimPrep.py" />
+    <Compile Include="SubmitGrapleBatch.py" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" />
 </Project>
