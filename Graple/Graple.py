@@ -10,6 +10,7 @@ import shutil
 
 CONFIG = {
     'SimsPerJob' : '5',
+    'RunR' : 'False',
     'Rmain' : 'RunSimulation.R',
     'Rexe' : 'C:\\Program Files\\R\\R-3.1.0\\bin\\Rscript.exe',
     'LogFile' : 'graple.log',
@@ -188,7 +189,8 @@ class Graple:
                 os.chdir(simdir)
                 os.mkdir('Results')
                 res = subprocess.call([glm])
-                #res = subprocess.call([rexe, rscript])
+                if CONFIG[RunR] == 'True':
+                    res = subprocess.call([rexe, rscript])
                 os.chdir(topdir)
         
         with tarfile.open('Results.bz2.tar', 'w') as tar:
