@@ -135,8 +135,10 @@ class Graple:
             tar.add(self.GlmDir)
             for adir in SimDirList:
                 tar.add(adir)
+        print JobName + ' created'
 
     def SimPrep(self):
+        print  'Preparing simulations for HTCondor submission...'
         ## Creates the series of job archives
         SimsForJob = []
         count = 0
@@ -151,7 +153,7 @@ class Graple:
             if count % int(CONFIG['SimsPerJob']) == 0:
                 jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
                 jobSuffix += 1
-                self.CreateJob(SimsForJob, jn)  
+                self.CreateJob(SimsForJob, jn)
                 SimsForJob = []
         if len(SimsForJob) > 0:
             jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
@@ -166,9 +168,9 @@ class Graple:
         runFile = open(join(self.CondorDir, 'run.cmd'), 'w')
         runFile.write(RUNCMD)
         runFile.close()
-
+        print 'Copying simulations to HTCondor pool.'
         subprocess.call(['condor_submit', join(self.CondorDir, 'jobs.submit')])
-
+        raw_input("Press Enter to continue...")
         
     def SimRun(self,):
         ## Runs a single job on the Condor execute node and packages the
@@ -189,7 +191,7 @@ class Graple:
                 os.chdir(simdir)
                 os.mkdir('Results')
                 res = subprocess.call([glm])
-                if CONFIG[RunR] == 'True':
+                if CONFIG['RunR'] == 'True':
                     res = subprocess.call([rexe, rscript])
                 os.chdir(topdir)
         
@@ -204,14 +206,28 @@ class Graple:
     def SimFixup(self,):
         ## Unpacks the result archives on the client side and cleans 
         ## up unused directories.
-        os.chdir(join(self.top_dir, self.ResultsDir))
+        if isdir(join(self.top_dir, self.ResultsDir)):
+            os.chdir(join(self.top_dir, self.ResultsDir))
+        else :
+             self.logger.error('Results directory does not exist')
+             raw_input("Press Enter to continue...")
+             return
         for f in listdir('.'):
-            if f.endswith('.bz2.tar'):
-                with tarfile.open(f, 'r') as tar:
-                    tar.extractall()
-                os.remove(f)
-        shutil.rmtree(join(self.top_dir, self.TempDir))
-        shutil.rmtree(join(self.top_dir, self.CondorDir))
+            try:
+                if f.endswith('.bz2.tar'):
+                    with tarfile.open(f, 'r') as tar:
+                        tar.extractall()
+                    print f + 'extract'
+                    os.remove(f)
+            except Exception as e:
+                #self.logger.error('This exception is not logging', exc_info=1)
+                self.logger.exception('Filed to open tarfile ' + f)
+        if isdir(join(self.top_dir, self.TempDir)):
+            shutil.rmtree(join(self.top_dir, self.TempDir))
+        if isdir(join(self.top_dir, self.CondorDir)):
+            shutil.rmtree(join(self.top_dir, self.CondorDir))
+        
+        raw_input("Press Enter to continue...")
 
 if __name__ == '__main__':
     sm = Graple()
