@@ -220,7 +220,6 @@ class Graple:
                     print f + 'extract'
                     os.remove(f)
             except Exception as e:
-                #self.logger.error('This exception is not logging', exc_info=1)
                 self.logger.exception('Filed to open tarfile ' + f)
         if isdir(join(self.top_dir, self.TempDir)):
             shutil.rmtree(join(self.top_dir, self.TempDir))
