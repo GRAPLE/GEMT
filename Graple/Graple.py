@@ -217,7 +217,7 @@ class Graple:
                 if f.endswith('.bz2.tar'):
                     with tarfile.open(f, 'r') as tar:
                         tar.extractall()
-                    print f + 'extract'
+                    print f + ' extracted'
                     os.remove(f)
             except Exception as e:
                 self.logger.exception('Filed to open tarfile ' + f)
