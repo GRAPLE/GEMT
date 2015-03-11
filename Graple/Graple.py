@@ -7,6 +7,7 @@ import subprocess
 import argparse
 import logging
 import shutil
+import time
 
 CONFIG = {
     'SimsPerJob' : '5',
@@ -14,23 +15,24 @@ CONFIG = {
     'Rmain' : 'RunSimulation.R',
     'Rexe' : 'C:\\Program Files\\R\\R-3.1.0\\bin\\Rscript.exe',
     'LogFile' : 'graple.log',
+    'SubmitMode' : 'SingleSubmit',
 }
 
 RUNCMD = '''C:\Python27\python.exe Graple.py -r\n'''
 
 SUBMIT = '''universe=vanilla
 executable=Condor\Run.cmd
-output=Scratch\\\\sim$(Process).out
-error=Scratch\\\\sim$(Process).err
-log=Scratch\\\\sim$(Process).log
+output=Scratch\\\\sim{JobNumber}.out
+error=Scratch\\\\sim{JobNumber}.err
+log=Scratch\\\\sim{JobNumber}.log
 requirements=(Memory >= 512) && (TARGET.Arch == "X86_64") && (TARGET.OpSys == "WINDOWS")
-transfer_input_files=Scratch\job$(Process).bz2.tar, Graple\Graple.py
+transfer_input_files=Scratch\job{JobNumber}.bz2.tar, Graple\Graple.py
 transfer_output_files=Results.bz2.tar
-transfer_output_remaps="Results.bz2.tar=Results\\\\Results$(Process).bz2.tar"
+transfer_output_remaps="Results.bz2.tar=Results\\\\Results{JobNumber}.bz2.tar"
 should_transfer_files=YES
 when_to_transfer_output=ON_EXIT
-notification=never'''
-
+notification=never
+Queue {QueueCount}'''
 
 class Graple:
     def __init__(self,):
@@ -49,8 +51,6 @@ class Graple:
         self.ResultsDir = 'Results'
 
         self.ZipBasename = join(self.top_dir, self.TempDir)
-        #if not isdir(self.ZipBasename):
-        #    os.mkdir(self.ZipBasename)
         self.ZipBasename = join(self.ZipBasename, 'job')
 
     def ParseArgs(self,):
@@ -137,7 +137,18 @@ class Graple:
                 tar.add(adir)
         print JobName + ' created'
 
-    def SimPrep(self):
+    def SubmitAJob(self, JobNum):
+        submitFile = open(join(self.CondorDir, 'jobs.submit'), 'w')
+        SubmitStr=SUBMIT.format(JobNumber=JobNum, QueueCount=1)   
+        submitFile.write(SubmitStr)
+        submitFile.close()
+        runFile = open(join(self.CondorDir, 'run.cmd'), 'w')
+        runFile.write(RUNCMD)
+        runFile.close()
+        print 'Copying simulation {JobNumber} to HTCondor pool.'.format(JobNumber=JobNum)
+        subprocess.call(['condor_submit', join(self.CondorDir, 'jobs.submit')])
+        
+    def SimPrepSingleSubmit(self,):
         print  'Preparing simulations for HTCondor submission...'
         ## Creates the series of job archives
         SimsForJob = []
@@ -152,24 +163,64 @@ class Graple:
                 count += 1  #count is used to limit how many sims are packed into a job
             if count % int(CONFIG['SimsPerJob']) == 0:
                 jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
-                jobSuffix += 1
                 self.CreateJob(SimsForJob, jn)
+                self.SubmitAJob(jobSuffix)
+                jobSuffix += 1
                 SimsForJob = []
         if len(SimsForJob) > 0:
             jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
-            jobSuffix += 1
             self.CreateJob(SimsForJob, jn)
+            self.SubmitAJob(jobSuffix)
+            jobSuffix += 1
             SimsForJob = []
-        queueStr = '\nQueue ' + str(jobSuffix)
+    
+    def SubmitJobs(self, NumberOfJobs):
         submitFile = open(join(self.CondorDir, 'jobs.submit'), 'w')
-        submitFile.write(SUBMIT)
-        submitFile.write(queueStr)
+        SubmitStr=SUBMIT.format(JobNumber='$(Process)', QueueCount=NumberOfJobs) 
+        submitFile.write(SubmitStr)
         submitFile.close()
         runFile = open(join(self.CondorDir, 'run.cmd'), 'w')
         runFile.write(RUNCMD)
         runFile.close()
         print 'Copying simulations to HTCondor pool.'
         subprocess.call(['condor_submit', join(self.CondorDir, 'jobs.submit')])
+
+    def SimPrepBatchSubmit(self):
+        print  'Preparing simulations for HTCondor submission...'
+        ## Creates the series of job archives
+        SimsForJob = []
+        count = 0
+        jobSuffix = 0
+        os.chdir(self.top_dir)
+        #build the list of Simxxx dirs to add to the job archives
+        for dir in listdir(self.SimsDir):
+            fqdn = join(self.SimsDir, dir)
+            if isdir(fqdn):
+                SimsForJob.append(fqdn)
+                count += 1  #count is used to limit how many sims are packed into a job
+            if count % int(CONFIG['SimsPerJob']) == 0:
+                jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
+                self.CreateJob(SimsForJob, jn)
+                jobSuffix += 1
+                SimsForJob = []
+        if len(SimsForJob) > 0:
+            jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
+            self.CreateJob(SimsForJob, jn)
+            jobSuffix += 1
+            SimsForJob = []
+        self.SubmitJobs(jobSuffix)
+
+    def SimPrep(self):
+        start = end = 0
+        if CONFIG['SubmitMode'] == 'SingleSubmit':
+            start = time.clock()
+            self.SimPrepSingleSubmit()
+            end = time.clock()
+        if CONFIG['SubmitMode'] == 'BatchSubmit':
+            start = time.clock()
+            self.SimPrepBatchSubmit()
+            end = time.clock()
+        print 'Duration for {0} is {1}'.format(CONFIG['SubmitMode'], end-start)
         raw_input("Press Enter to continue...")
         
     def SimRun(self,):
