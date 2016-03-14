@@ -13,22 +13,23 @@ CONFIG = {
     'SimsPerJob' : '5',
     'RunR' : 'False',
     'Rmain' : 'RunSimulation.R',
-    'Rexe' : 'C:\\Program Files\\R\\R-3.1.0\\bin\\Rscript.exe',
+    'Rexe' : '/usr/bin/R',
     'LogFile' : 'graple.log',
     'SubmitMode' : 'SingleSubmit',
 }
 
-RUNCMD = '''C:\Python27\python.exe Graple.py -r\n'''
+RUNCMD = '''#!/bin/sh\npython Graple.py -r\n'''
+#RUNCMD = '''C:\Python27\python.exe Graple.py -r\n'''
 
 SUBMIT = '''universe=vanilla
-executable=Condor\Run.cmd
-output=Scratch\\\\sim{JobNumber}.out
-error=Scratch\\\\sim{JobNumber}.err
-log=Scratch\\\\sim{JobNumber}.log
-requirements=(Memory >= 512) && (TARGET.Arch == "X86_64") && (TARGET.OpSys == "WINDOWS")
-transfer_input_files=Scratch\job{JobNumber}.bz2.tar, Graple\Graple.py
+executable=Condor/run.sh
+output=Scratch/sim{JobNumber}.out
+error=Scratch/sim{JobNumber}.err
+log=Scratch/sim{JobNumber}.log
+requirements=(Memory >= 512) && (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX")
+transfer_input_files=Scratch/job{JobNumber}.bz2.tar, Graple/Graple.py
 transfer_output_files=Results.bz2.tar
-transfer_output_remaps="Results.bz2.tar=Results\\\\Results{JobNumber}.bz2.tar"
+transfer_output_remaps="Results.bz2.tar=Results/Results{JobNumber}.bz2.tar"
 should_transfer_files=YES
 when_to_transfer_output=ON_EXIT
 notification=never
@@ -97,7 +98,7 @@ class Graple:
         self.logger.addHandler(ch)
         self.logger.addHandler(fh)
 
-    def CreateWorkingFolders(self, NumSims=3):
+    def CreateWorkingFolders(self, NumSims=0):
         os.chdir(self.top_dir)
         if not isdir(self.ScriptsDir):
             os.mkdir(self.ScriptsDir)
@@ -142,7 +143,7 @@ class Graple:
         SubmitStr=SUBMIT.format(JobNumber=JobNum, QueueCount=1)   
         submitFile.write(SubmitStr)
         submitFile.close()
-        runFile = open(join(self.CondorDir, 'run.cmd'), 'w')
+        runFile = open(join(self.CondorDir, 'run.sh'), 'w')
         runFile.write(RUNCMD)
         runFile.close()
         print 'Copying simulation {JobNumber} to HTCondor pool.'.format(JobNumber=JobNum)
@@ -179,7 +180,7 @@ class Graple:
         SubmitStr=SUBMIT.format(JobNumber='$(Process)', QueueCount=NumberOfJobs) 
         submitFile.write(SubmitStr)
         submitFile.close()
-        runFile = open(join(self.CondorDir, 'run.cmd'), 'w')
+        runFile = open(join(self.CondorDir, 'run.sh'), 'w')
         runFile.write(RUNCMD)
         runFile.close()
         print 'Copying simulations to HTCondor pool.'
@@ -221,14 +222,14 @@ class Graple:
             self.SimPrepBatchSubmit()
             end = time.clock()
         print 'Duration for {0} is {1}'.format(CONFIG['SubmitMode'], end-start)
-        raw_input("Press Enter to continue...")
+        #raw_input("Press Enter to continue...")
         
     def SimRun(self,):
         ## Runs a single job on the Condor execute node and packages the
         ## results that are returned to the client.
         rexe = CONFIG['Rexe']
         topdir = os.getcwd()
-        glm = join(join(topdir, 'GLM'), 'glm.exe',)
+        glm = join(join(topdir, 'GLM'), 'glm',)
         rscript = join(join(topdir, 'Scripts'), CONFIG['Rmain'])
               
         for JobName in listdir('.'):
@@ -241,12 +242,16 @@ class Graple:
             if isdir(simdir):
                 os.chdir(simdir)
                 os.mkdir('Results')
+                subprocess.call("export LD_LIBRARY_PATH=.",shell=True)
                 res = subprocess.call([glm])
                 if CONFIG['RunR'] == 'True':
                     res = subprocess.call([rexe, rscript])
+                for file in os.listdir("."):
+                    if (os.path.isdir(file)==False):
+                        shutil.copy(os.path.join(os.getcwd(),file),os.path.join(os.getcwd(),'Results'))
                 os.chdir(topdir)
         
-        with tarfile.open('Results.bz2.tar', 'w') as tar:
+        with tarfile.open('Results.bz2.tar', 'w:bz2',compresslevel=9) as tar:
             for d in listdir('Sims'):
                 #resultsdir = join(join(join(topdir, 'Sims'), d), 'Results')
                 resultsdir = join(join('Sims', d), 'Results')
@@ -261,7 +266,7 @@ class Graple:
             os.chdir(join(self.top_dir, self.ResultsDir))
         else :
              self.logger.error('Results directory does not exist')
-             raw_input("Press Enter to continue...")
+             #raw_input("Press Enter to continue...")
              return
         for f in listdir('.'):
             try:
@@ -277,7 +282,7 @@ class Graple:
         if isdir(join(self.top_dir, self.CondorDir)):
             shutil.rmtree(join(self.top_dir, self.CondorDir))
         
-        raw_input("Press Enter to continue...")
+        #raw_input("Press Enter to continue...")
 
 if __name__ == '__main__':
     sm = Graple()
