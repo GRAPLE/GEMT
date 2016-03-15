@@ -11,9 +11,9 @@ import time
 
 CONFIG = {
     'SimsPerJob' : '5',
-    'RunR' : 'False',
-    'Rmain' : 'RunSimulation.R',
-    'Rexe' : '/usr/bin/R',
+    'RunR' : 'True',
+    'Rmain' : 'PostProcessFilter.R',
+    'Rexe' : '/usr/bin/Rscript',
     'LogFile' : 'graple.log',
     'SubmitMode' : 'SingleSubmit',
 }
@@ -244,11 +244,12 @@ class Graple:
                 os.mkdir('Results')
                 subprocess.call("export LD_LIBRARY_PATH=.",shell=True)
                 res = subprocess.call([glm])
-                if CONFIG['RunR'] == 'True':
-                    res = subprocess.call([rexe, rscript])
                 for file in os.listdir("."):
                     if (os.path.isdir(file)==False):
                         shutil.copy(os.path.join(os.getcwd(),file),os.path.join(os.getcwd(),'Results'))
+                if os.path.isfile(rscript): 
+                    if CONFIG['RunR'] == 'True':
+                        res = subprocess.call([rexe, '--vanilla', rscript])
                 os.chdir(topdir)
         
         with tarfile.open('Results.bz2.tar', 'w:bz2',compresslevel=9) as tar:
