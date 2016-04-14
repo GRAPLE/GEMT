@@ -1,13 +1,12 @@
 {
+    "num_iterations":6,
     "ExpFiles": [{
                 "driverfile": "Mendota_hourly.csv",
-                "num_iterations":30,
                 "variables":[{
                     "AirTemp": { "distribution" : "uniform", "operation" : "add", "start" : -40, "end" : 40 }
                  }]
             }, {
                 "driverfile": "Mendota_yahara.csv",
-                "num_iterations":30, 
                 "variables":[{
                     "temp": { "distribution" : "uniform", "operation" : "add", "start" : -40, "end" : 40 }
                  }]
