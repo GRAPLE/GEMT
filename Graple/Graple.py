@@ -241,7 +241,7 @@ class Graple:
                 res = subprocess.call(glm)
                 for file in os.listdir("."):
                     if (os.path.isdir(file)==False):
-                        shutil.copy(os.path.join(os.getcwd(),file),os.path.join(os.getcwd(),'Results'))
+                        shutil.move(os.path.join(os.getcwd(),file),os.path.join(os.getcwd(),'Results'))
                 if os.path.isfile(rscript): 
                     if CONFIG['RunR'] == 'True':
                         res = subprocess.call([rexe, '--vanilla', rscript])
