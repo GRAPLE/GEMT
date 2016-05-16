@@ -8,15 +8,10 @@ import argparse
 import logging
 import shutil
 import time
+import pickle
+import pandas
+import csv
 
-CONFIG = {
-    'SimsPerJob' : '5',
-    'RunR' : 'True',
-    'Rmain' : 'PostProcessFilter.R',
-    'Rexe' : '/usr/bin/Rscript',
-    'LogFile' : 'graple.log',
-    'SubmitMode' : 'SingleSubmit',
-}
 
 RUNCMD = '''#!/bin/sh\npython Graple.py -r\n'''
 #RUNCMD = '''C:\Python27\python.exe Graple.py -r\n'''
@@ -38,10 +33,18 @@ Queue {QueueCount}'''
 
 class Graple:
     def __init__(self,):
+        self.CONFIG = {
+            'SimsPerJob' : '5',
+            'RunR' : 'True',
+            'Rmain' : 'PostProcessFilter.R',
+            'Rexe' : '/usr/bin/Rscript',
+            'LogFile' : 'graple.log',
+            'SubmitMode' : 'SingleSubmit',
+        }
         self.SetupLogger()
         self.ParseArgs()
-        if 'SimRoot' in CONFIG:
-            self.top_dir = CONFIG['SimRoot']
+        if 'SimRoot' in self.CONFIG:
+            self.top_dir = self.CONFIG['SimRoot']
         else:
             #self.top_dir, base_dir = os.path.split(os.getcwd())
             self.top_dir = os.getcwd()
@@ -85,7 +88,7 @@ class Graple:
         self.logger = logging.getLogger('GRAPLE')
         self.logger.setLevel(logging.DEBUG)
         # create file handler which logs even debug messages
-        fh = logging.FileHandler(CONFIG['LogFile'])
+        fh = logging.FileHandler(self.CONFIG['LogFile'])
         fh.setLevel(logging.DEBUG)
         # create console handler with a higher log level
         ch = logging.StreamHandler()
@@ -158,7 +161,7 @@ class Graple:
             if isdir(fqdn):
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
-            if count % int(CONFIG['SimsPerJob']) == 0:
+            if count % int(self.CONFIG['SimsPerJob']) == 0:
                 jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
                 self.CreateJob(SimsForJob, jn)
                 self.SubmitAJob(jobSuffix)
@@ -195,7 +198,7 @@ class Graple:
             if isdir(fqdn):
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
-            if count % int(CONFIG['SimsPerJob']) == 0:
+            if count % int(self.CONFIG['SimsPerJob']) == 0:
                 jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
                 self.CreateJob(SimsForJob, jn)
                 jobSuffix += 1
@@ -209,30 +212,69 @@ class Graple:
 
     def SimPrep(self):
         start = end = 0
-        if CONFIG['SubmitMode'] == 'SingleSubmit':
+        if self.CONFIG['SubmitMode'] == 'SingleSubmit':
             start = time.clock()
             self.SimPrepSingleSubmit()
             end = time.clock()
-        if CONFIG['SubmitMode'] == 'BatchSubmit':
+        if self.CONFIG['SubmitMode'] == 'BatchSubmit':
             start = time.clock()
             self.SimPrepBatchSubmit()
             end = time.clock()
-        print 'Duration for {0} is {1}'.format(CONFIG['SubmitMode'], end-start)
+        print 'Duration for {0} is {1}'.format(self.CONFIG['SubmitMode'], end-start)
         #raw_input("Press Enter to continue...")
         
     def SimRun(self,):
         ## Runs a single job on the Condor execute node and packages the
         ## results that are returned to the client.
-        rexe = CONFIG['Rexe']
+        rexe = self.CONFIG['Rexe']
         topdir = os.getcwd()
         glm = "/usr/local/bin/glm"
-        rscript = join(join(topdir, 'Scripts'), CONFIG['Rmain'])
+        rscript = join(join(topdir, 'Scripts'), self.CONFIG['Rmain'])
               
         for JobName in listdir('.'):
             if isfile(JobName) and JobName.endswith('.bz2.tar'):
                 with tarfile.open(JobName, 'r') as tar:
                     tar.extractall()
                 break
+        # before entering loop, create multiple subdirectories in SimsDir for a generate job
+        sims_list = listdir(self.SimsDir)
+        if len(sims_list) > 0:
+            pickle_file = os.path.join(self.SimsDir, sims_list[0], "generate.pickle")
+            if os.path.exists(pickle_file):
+                master_copy = os.path.join(self.SimsDir, sims_list[0])
+                with open(pickle_file) as pfd:
+                    to_generate = pickle.load(pfd)
+                varcomb = to_generate[0]
+                iterprod = to_generate[1]
+                for subSimNo in range(len(iterprod)):
+                    subSimDir = os.path.join(self.SimsDir, sims_list[0] + "_" + str(subSimNo + 1))
+                    shutil.copytree(master_copy, subSimDir)
+                    # look at to_generate and modify csv files in subSimDir
+                    for i in range(len(varcomb)):
+                        var_list = varcomb[i].split(",")
+                        base_file = os.path.join(subSimDir, var_list[0])
+                        field = var_list[1]
+                        operation = var_list[3]
+                        delta = iterprod[subSimNo][i]
+                        data = pandas.read_csv(base_file)
+                        data = data.rename(columns=lambda x: x.strip())
+                        if (((" "+field) in data.columns) or (field in data.columns)):
+                        # handle variations in filed names in csv file, some field names have leading spaces.
+                            if " "+field in data.columns:
+                                field_modified = " "+field
+                            else:
+                                field_modified = field
+                        if (operation=="add"):
+                            data[field_modified]=data[field_modified].apply(lambda val:val+delta)
+                        elif (operation=="sub"):
+                            data[base_file][field_modified]=data[field_modified].apply(lambda val:val-delta)
+                        elif (operation=="mul"):
+                            data[field_modified]=data[field_modified].apply(lambda val:val*delta)
+                        elif (operation=="div"):
+                            data[field_modified]=data[field_modified].apply(lambda val:val/delta)
+                        data.to_csv(base_file,index=False)
+                shutil.rmtree(master_copy)
+            
         for d in listdir(self.SimsDir):
             simdir = join(self.SimsDir, d)
             if isdir(simdir):
@@ -243,7 +285,7 @@ class Graple:
                     if (os.path.isdir(file)==False):
                         shutil.move(os.path.join(os.getcwd(),file),os.path.join(os.getcwd(),'Results'))
                 if os.path.isfile(rscript): 
-                    if CONFIG['RunR'] == 'True':
+                    if self.CONFIG['RunR'] == 'True':
                         res = subprocess.call([rexe, '--vanilla', rscript])
                 else: 
                     os.chdir('Results') 
