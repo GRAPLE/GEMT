@@ -8,7 +8,7 @@ import argparse
 import logging
 import shutil
 import time
-import pickle
+import json
 import pandas
 import csv
 
@@ -239,11 +239,11 @@ class Graple:
         # before entering loop, create multiple subdirectories in SimsDir for a generate job
         sims_list = listdir(self.SimsDir)
         if len(sims_list) > 0:
-            pickle_file = os.path.join(self.SimsDir, sims_list[0], "generate.pickle")
-            if os.path.exists(pickle_file):
+            generate_file = os.path.join(self.SimsDir, sims_list[0], "generate.json")
+            if os.path.exists(generate_file):
                 master_copy = os.path.join(self.SimsDir, sims_list[0])
-                with open(pickle_file) as pfd:
-                    to_generate = pickle.load(pfd)
+                with open(generate_file) as jfd:
+                    to_generate = json.load(jfd)
                 varcomb = to_generate[0]
                 iterprod = to_generate[1]
                 for subSimNo in range(len(iterprod)):
