@@ -2,7 +2,7 @@
 import os
 from os import listdir
 from os.path import isdir, isfile, join
-import zipfile, tarfile
+import tarfile
 import subprocess
 import argparse
 import logging
@@ -18,21 +18,21 @@ RUNCMD = '''#!/bin/sh\npython Graple.py -r\n'''
 
 SUBMIT = '''universe=vanilla
 executable=Condor/run.sh
-output=Scratch/sim{JobNumber}.out
-error=Scratch/sim{JobNumber}.err
-log=Scratch/sim{JobNumber}.log
+output=Logs/sim{JobNumber}.out
+error=Logs/sim{JobNumber}.err
+log=Logs/sim{JobNumber}.log
 request_memory=512M
 requirements=(TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX")
-transfer_input_files=Scratch/job{JobNumber}.bz2.tar, Graple/Graple.py
-transfer_output_files=Results.bz2.tar
-transfer_output_remaps="Results.bz2.tar=Results/Results{JobNumber}.bz2.tar"
+transfer_input_files=Scratch/job{JobNumber}.tar.bz2, Graple.py
+transfer_output_files=Results.tar.bz2, graple.log
+transfer_output_remaps="Results.tar.bz2=Results/Results{JobNumber}.tar.bz2; graple.log=Logs/graple{JobNumber}.log"
 should_transfer_files=YES
 when_to_transfer_output=ON_EXIT
 notification=never
 Queue {QueueCount}'''
 
 class Graple:
-    def __init__(self,):
+    def __init__(self, topdir):
         self.CONFIG = {
             'SimsPerJob' : '5',
             'RunR' : 'True',
@@ -40,22 +40,23 @@ class Graple:
             'Rexe' : '/usr/bin/Rscript',
             'LogFile' : 'graple.log',
             'SubmitMode' : 'SingleSubmit',
+            'SimRoot' : topdir
         }
-        self.SetupLogger()
-        self.ParseArgs()
         if 'SimRoot' in self.CONFIG:
             self.top_dir = self.CONFIG['SimRoot']
         else:
-            #self.top_dir, base_dir = os.path.split(os.getcwd())
             self.top_dir = os.getcwd()
-        self.ScriptsDir = 'Scripts'
-        self.SimsDir = 'Sims'
-        self.CondorDir = 'Condor'
-        self.TempDir = 'Scratch'
-        self.ResultsDir = 'Results'
-
-        self.ZipBasename = join(self.top_dir, self.TempDir)
-        self.ZipBasename = join(self.ZipBasename, 'job')
+        self.SetupLogger()
+        self.ParseArgs()
+        self.ScriptsDir = os.path.join(self.top_dir, 'Scripts')
+        self.SimsDir = os.path.join(self.top_dir, 'Sims')
+        self.CondorDir = os.path.join(self.top_dir, 'Condor')
+        self.TempDir = os.path.join(self.top_dir, 'Scratch')
+        self.LogsDir = os.path.join(self.top_dir, 'Logs')
+        self.ResultsDir = os.path.join(self.top_dir, 'Results')
+        self.ZipBasename = join(self.TempDir, 'job')
+        self.logger.debug("CONFIG: %s", self.CONFIG)
+        self.logger.debug("top_dir: %s", self.top_dir)
 
     def ParseArgs(self,):
         self.parser = argparse.ArgumentParser(prog='Graple', description='Helper program to prep, run & collect sim results')
@@ -85,24 +86,10 @@ class Graple:
         else: return False
 
     def SetupLogger(self,):
-        self.logger = logging.getLogger('GRAPLE')
-        self.logger.setLevel(logging.DEBUG)
-        # create file handler which logs even debug messages
-        fh = logging.FileHandler(self.CONFIG['LogFile'])
-        fh.setLevel(logging.DEBUG)
-        # create console handler with a higher log level
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.ERROR)
-        # create formatter and add it to the handlers
-        formatter = logging.Formatter('%(asctime)s:%(levelname)s - %(message)s')
-        ch.setFormatter(formatter)
-        fh.setFormatter(formatter)
-        # add the handlers to logger
-        self.logger.addHandler(ch)
-        self.logger.addHandler(fh)
+        self.logger = logging.basicConfig(filename = os.path.join(self.top_dir, self.CONFIG['LogFile']), level = logging.DEBUG, format = '%(asctime)s:%(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
 
     def CreateWorkingFolders(self, NumSims=0):
-        os.chdir(self.top_dir)
         if not isdir(self.ScriptsDir):
             os.mkdir(self.ScriptsDir)
         
@@ -115,13 +102,16 @@ class Graple:
         if not isdir(self.SimsDir):
             os.mkdir(self.SimsDir)
 
+        if not isdir(self.LogsDir):
+            os.mkdir(self.LogsDir)
+
         if not isdir(self.ResultsDir):
             os.mkdir(self.ResultsDir)
 
-        os.chdir(self.SimsDir)
         for i in range(NumSims):
-            if not isdir('Sim' + str(i)):
-                os.mkdir('Sim' + str(i))
+            if not isdir(os.path.join(self.SimsDir, 'Sim' + str(i))):
+                os.mkdir(os.path.join(self.SimsDir, 'Sim' + str(i)))
+        self.logger.info("Created working folders")
 
     def ZipDir(self, path, archiver):
         for root, dirs, files in os.walk(path):
@@ -130,12 +120,12 @@ class Graple:
 
     def CreateJob(self, SimDirList, JobName):
         ## Creates a single job ZIP file
-        os.chdir(self.top_dir)
         with tarfile.open(JobName, 'w:bz2', compresslevel=9) as tar:
-            tar.add(self.ScriptsDir)
+            tar.add(self.ScriptsDir, 'Scripts')
             for adir in SimDirList:
-                tar.add(adir)
-        print JobName + ' created'
+                tar.add(adir, 'Sims/' + os.path.basename(os.path.normpath(adir)))
+                shutil.rmtree(adir)
+        self.logger.info(JobName + ' created')
 
     def SubmitAJob(self, JobNum):
         submitFile = open(join(self.CondorDir, 'jobs.submit'), 'w')
@@ -145,34 +135,34 @@ class Graple:
         runFile = open(join(self.CondorDir, 'run.sh'), 'w')
         runFile.write(RUNCMD)
         runFile.close()
-        print 'Copying simulation {JobNumber} to HTCondor pool.'.format(JobNumber=JobNum)
-        subprocess.call(['condor_submit', join(self.CondorDir, 'jobs.submit')])
+        self.logger.info('Submitting simulation {JobNumber} to HTCondor pool.'.format(JobNumber=JobNum))
+        subprocess.call(['condor_submit', os.path.join(self.CondorDir, 'jobs.submit')], cwd = self.top_dir)
         
     def SimPrepSingleSubmit(self,):
-        print  'Preparing simulations for HTCondor submission...'
+        self.logger.info('Preparing simulations for HTCondor submission...')
         ## Creates the series of job archives
         SimsForJob = []
         count = 0
         jobSuffix = 0
-        os.chdir(self.top_dir)
         #build the list of Simxxx dirs to add to the job archives
-        for dir in listdir(self.SimsDir):
-            fqdn = join(self.SimsDir, dir)
+        for dirname in listdir(self.SimsDir):
+            fqdn = os.path.join(self.SimsDir, dirname)
             if isdir(fqdn):
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
             if count % int(self.CONFIG['SimsPerJob']) == 0:
-                jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
+                jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
                 self.CreateJob(SimsForJob, jn)
                 self.SubmitAJob(jobSuffix)
                 jobSuffix += 1
                 SimsForJob = []
         if len(SimsForJob) > 0:
-            jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
+            jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
             self.CreateJob(SimsForJob, jn)
             self.SubmitAJob(jobSuffix)
             jobSuffix += 1
             SimsForJob = []
+        self.logger.info('All jobs submitted')
     
     def SubmitJobs(self, NumberOfJobs):
         submitFile = open(join(self.CondorDir, 'jobs.submit'), 'w')
@@ -182,16 +172,15 @@ class Graple:
         runFile = open(join(self.CondorDir, 'run.sh'), 'w')
         runFile.write(RUNCMD)
         runFile.close()
-        print 'Copying simulations to HTCondor pool.'
+        self.logger.info('Submitting simulations to HTCondor pool.')
         subprocess.call(['condor_submit', join(self.CondorDir, 'jobs.submit')])
 
     def SimPrepBatchSubmit(self):
-        print  'Preparing simulations for HTCondor submission...'
+        self.logger.info('Preparing simulations for HTCondor submission...')
         ## Creates the series of job archives
         SimsForJob = []
         count = 0
         jobSuffix = 0
-        os.chdir(self.top_dir)
         #build the list of Simxxx dirs to add to the job archives
         for dir in listdir(self.SimsDir):
             fqdn = join(self.SimsDir, dir)
@@ -199,12 +188,12 @@ class Graple:
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
             if count % int(self.CONFIG['SimsPerJob']) == 0:
-                jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
+                jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
                 self.CreateJob(SimsForJob, jn)
                 jobSuffix += 1
                 SimsForJob = []
         if len(SimsForJob) > 0:
-            jn = self.ZipBasename + str(jobSuffix) + '.bz2.tar'
+            jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
             self.CreateJob(SimsForJob, jn)
             jobSuffix += 1
             SimsForJob = []
@@ -220,22 +209,23 @@ class Graple:
             start = time.clock()
             self.SimPrepBatchSubmit()
             end = time.clock()
-        print 'Duration for {0} is {1}'.format(self.CONFIG['SubmitMode'], end-start)
-        #raw_input("Press Enter to continue...")
+        self.logger.debug('Duration for {0} is {1}'.format(self.CONFIG['SubmitMode'], end-start))
         
     def SimRun(self,):
         ## Runs a single job on the Condor execute node and packages the
         ## results that are returned to the client.
+        self.logger.info("Simulation invoked at path %s", self.top_dir)
         rexe = self.CONFIG['Rexe']
-        topdir = os.getcwd()
         glm = "/usr/local/bin/glm"
-        rscript = join(join(topdir, 'Scripts'), self.CONFIG['Rmain'])
+        rscript = os.path.join(self.ScriptsDir, self.CONFIG['Rmain'])
               
-        for JobName in listdir('.'):
-            if isfile(JobName) and JobName.endswith('.bz2.tar'):
+        for JobName in listdir(self.top_dir):
+            if isfile(JobName) and JobName.endswith('.tar.bz2'):
                 with tarfile.open(JobName, 'r') as tar:
                     tar.extractall()
                 break
+
+        self.logger.info("Simulations extracted")
         # before entering loop, create multiple subdirectories in SimsDir for a generate job
         sims_list = listdir(self.SimsDir)
         if len(sims_list) > 0:
@@ -274,61 +264,63 @@ class Graple:
                             data[field_modified]=data[field_modified].apply(lambda val:val/delta)
                         data.to_csv(base_file,index=False)
                 shutil.rmtree(master_copy)
+            self.logger.info("Generate job complete")
             
         for d in listdir(self.SimsDir):
-            simdir = join(self.SimsDir, d)
+            simdir = os.path.join(self.SimsDir, d)
+            self.logger.info("Running simulation at path %s", simdir)
             if isdir(simdir):
-                os.chdir(simdir)
-                os.mkdir('Results')
-                res = subprocess.call(glm)
-                for file in os.listdir("."):
-                    if (os.path.isdir(file)==False):
-                        shutil.move(os.path.join(os.getcwd(),file),os.path.join(os.getcwd(),'Results'))
+                results_dir = os.path.join(simdir, 'Results')
+                os.mkdir(results_dir)
+                res = subprocess.call([glm], cwd = simdir)
+                for filename in os.listdir(simdir):
+                    filename = os.path.join(simdir, filename)
+                    if (os.path.isdir(filename) == False):
+                        shutil.move(os.path.join(simdir, filename), results_dir)
                 if os.path.isfile(rscript): 
                     if self.CONFIG['RunR'] == 'True':
-                        res = subprocess.call([rexe, '--vanilla', rscript])
+                        self.logger.info("Running post processing filter")
+                        res = subprocess.call([rexe, '--vanilla', rscript], cwd = simdir)
                 else: 
-                    os.chdir('Results') 
-                    for file in os.listdir("."):
-                        if(os.path.isdir(file)==False and file!='output.nc'):
-                            os.remove(file)  
-                os.chdir(topdir)
+                    for filename in os.listdir(results_dir):
+                        filename = os.path.join(results_dir, filename)
+                        if(os.path.isdir(filename) == False and filename != 'output.nc'):
+                            os.remove(filename)  
+
+        self.logger.info("All simulations complete. Starting compression")
         
-        with tarfile.open('Results.bz2.tar', 'w:bz2',compresslevel=9) as tar:
-            for d in listdir('Sims'):
+        with tarfile.open(os.path.join(self.top_dir, 'Results.tar.bz2'), 'w:bz2',compresslevel=9) as tar:
+            for d in listdir(self.SimsDir):
                 #resultsdir = join(join(join(topdir, 'Sims'), d), 'Results')
-                resultsdir = join(join('Sims', d), 'Results')
+                resultsdir = os.path.join(self.SimsDir, d, 'Results')
                 if isdir(resultsdir):
-                    tar.add(resultsdir)
+                    tar.add(resultsdir, 'Sims/' + d + '/Results')
+
+        self.logger.info("SimRun finished")
 
 
     def SimFixup(self,):
         ## Unpacks the result archives on the client side and cleans 
         ## up unused directories.
-        if isdir(join(self.top_dir, self.ResultsDir)):
-            os.chdir(join(self.top_dir, self.ResultsDir))
-        else :
+        if not isdir(self.ResultsDir):
              self.logger.error('Results directory does not exist')
-             #raw_input("Press Enter to continue...")
              return
-        for f in listdir('.'):
+        for f in listdir(self.top_dir):
             try:
-                if f.endswith('.bz2.tar'):
+                if f.endswith('.tar.bz2'):
                     with tarfile.open(f, 'r') as tar:
                         tar.extractall()
-                    print f + ' extracted'
+                    self.logger.debug(f + ' extracted')
                     os.remove(f)
             except Exception as e:
                 self.logger.exception('Filed to open tarfile ' + f)
-        if isdir(join(self.top_dir, self.TempDir)):
-            shutil.rmtree(join(self.top_dir, self.TempDir))
-        if isdir(join(self.top_dir, self.CondorDir)):
-            shutil.rmtree(join(self.top_dir, self.CondorDir))
+        if isdir(self.TempDir):
+            shutil.rmtree(self.TempDir)
+        if isdir(self.CondorDir):
+            shutil.rmtree(self.CondorDir)
         
-        #raw_input("Press Enter to continue...")
-
 if __name__ == '__main__':
-    sm = Graple()
+    sm = Graple(os.getcwd())
     if sm.isCreateWorkingFolders():
         sm.CreateWorkingFolders()
     if sm.isSimPrep():
