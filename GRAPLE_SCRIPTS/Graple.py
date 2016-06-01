@@ -283,9 +283,9 @@ class Graple:
                         res = subprocess.call([rexe, '--vanilla', rscript], cwd = simdir)
                 else: 
                     for filename in os.listdir(results_dir):
-                        filename = os.path.join(results_dir, filename)
-                        if(os.path.isdir(filename) == False and filename != 'output.nc'):
-                            os.remove(filename)  
+                        fullname = os.path.join(results_dir, filename)
+                        if(os.path.isdir(fullname) == False and filename != 'output.nc'):
+                            os.remove(fullname)
 
         self.logger.info("All simulations complete. Starting compression")
         
