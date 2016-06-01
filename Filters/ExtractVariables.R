@@ -3,8 +3,8 @@ library(rjson)
 library(glmtools)
 currentdir = getwd()
 print(currentdir)
-setwd(paste(currentdir, "../../Scripts", sep="/"))
-tempRJSON = fromJSON(file = "FilterParams.json")
+setwd(paste(currentdir, '../../Scripts', sep='/'))
+tempRJSON = fromJSON(file = 'FilterParams.json')
 VarsToAnalyze = character(0)
 Depths = list()
 for(i in 1:length(tempRJSON))
@@ -12,8 +12,8 @@ for(i in 1:length(tempRJSON))
   VarsToAnalyze = c(VarsToAnalyze, names(tempRJSON[i]))
   Depths = c(Depths, list(tempRJSON[[i]]$Depths))
 }
-setwd(paste(currentdir, "Results", sep="/"))
-SimDir = paste(getwd(),"", sep="/") 
+setwd(paste(currentdir, 'Results', sep='/'))
+SimDir = paste(getwd(),'', sep='/') 
 SimFile = 'output.nc' 
 listOfFiles = character(0)
 print(getwd())
@@ -37,7 +37,7 @@ if (file.exists(SimFile)){
       myOriginalDataPC = get_var(SimFile,var_name = VarName,reference = 'surface', z_out = zDepth)
     }
     # Write output to disk
-    write.csv(myOriginalDataPC,file = paste(SimDir, '/', VarName,'.csv',sep=""))
+    write.csv(myOriginalDataPC,file = paste(SimDir, '/', VarName,'.csv',sep=''))
     listOfFiles <- c(listOfFiles,paste(VarName,'.csv', sep="")) 
  }
  print(listOfFiles) 
