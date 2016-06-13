@@ -1,7 +1,6 @@
 #Post-processing script for GLM simulations in the GRAPLEr
 #Set up to extract multiple summary response variables from one simulation period in dataset CSV format
 #Written by Cayelan Carey, last edits on 1 May 2016
-#CONSOLIDATE_COMPATIBLE
 #Note: need to edit the experiments directory on line 9
 
 library(glmtools)
