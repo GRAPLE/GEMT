@@ -211,13 +211,33 @@ class Graple:
             end = time.clock()
         self.logger.debug('Duration for {0} is {1}'.format(self.CONFIG['SubmitMode'], end-start))
         
+    def RunJob(self, simdir):
+        rexe = self.CONFIG['Rexe']
+        glm = "/usr/local/bin/glm"
+        rscript = os.path.join(self.ScriptsDir, self.CONFIG['Rmain'])
+        self.logger.info("Running simulation at path %s", simdir)
+        if isdir(simdir):
+            results_dir = os.path.join(simdir, 'Results')
+            os.mkdir(results_dir)
+            res = subprocess.call([glm], cwd = simdir)
+            for filename in os.listdir(simdir):
+                filename = os.path.join(simdir, filename)
+                if (os.path.isdir(filename) == False):
+                    shutil.move(os.path.join(simdir, filename), results_dir)
+            if os.path.isfile(rscript): 
+                if self.CONFIG['RunR'] == 'True':
+                    self.logger.info("Running post processing filter")
+                    res = subprocess.call([rexe, '--vanilla', rscript], cwd = simdir)
+            else: 
+                for filename in os.listdir(results_dir):
+                    fullname = os.path.join(results_dir, filename)
+                    if(os.path.isdir(fullname) == False and filename != 'output.nc'):
+                        os.remove(fullname)
+
     def SimRun(self,):
         ## Runs a single job on the Condor execute node and packages the
         ## results that are returned to the client.
         self.logger.info("Simulation invoked at path %s", self.top_dir)
-        rexe = self.CONFIG['Rexe']
-        glm = "/usr/local/bin/glm"
-        rscript = os.path.join(self.ScriptsDir, self.CONFIG['Rmain'])
               
         for JobName in listdir(self.top_dir):
             if isfile(JobName) and JobName.endswith('.tar.bz2'):
@@ -263,29 +283,13 @@ class Graple:
                         elif (operation=="div"):
                             data[field_modified]=data[field_modified].apply(lambda val:val/delta)
                         data.to_csv(base_file,index=False)
+                    self.RunJob(subSimDir)
                 shutil.rmtree(master_copy)
-            self.logger.info("Generate job complete")
-            
-        for d in listdir(self.SimsDir):
-            simdir = os.path.join(self.SimsDir, d)
-            self.logger.info("Running simulation at path %s", simdir)
-            if isdir(simdir):
-                results_dir = os.path.join(simdir, 'Results')
-                os.mkdir(results_dir)
-                res = subprocess.call([glm], cwd = simdir)
-                for filename in os.listdir(simdir):
-                    filename = os.path.join(simdir, filename)
-                    if (os.path.isdir(filename) == False):
-                        shutil.move(os.path.join(simdir, filename), results_dir)
-                if os.path.isfile(rscript): 
-                    if self.CONFIG['RunR'] == 'True':
-                        self.logger.info("Running post processing filter")
-                        res = subprocess.call([rexe, '--vanilla', rscript], cwd = simdir)
-                else: 
-                    for filename in os.listdir(results_dir):
-                        fullname = os.path.join(results_dir, filename)
-                        if(os.path.isdir(fullname) == False and filename != 'output.nc'):
-                            os.remove(fullname)
+                self.logger.info("Generate and run job complete")
+            else:
+                for d in sims_list:
+                    simdir = os.path.join(self.SimsDir, d)
+                    self.RunJob(simdir)
 
         self.logger.info("All simulations complete. Starting compression")
         
@@ -313,7 +317,7 @@ class Graple:
                     self.logger.debug(f + ' extracted')
                     os.remove(f)
             except Exception as e:
-                self.logger.exception('Filed to open tarfile ' + f)
+                self.logger.exception('Failed to open tarfile ' + f)
         if isdir(self.TempDir):
             shutil.rmtree(self.TempDir)
         if isdir(self.CondorDir):
