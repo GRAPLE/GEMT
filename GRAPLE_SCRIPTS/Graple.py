@@ -228,6 +228,10 @@ class Graple:
                 if self.CONFIG['RunR'] == 'True':
                     self.logger.info("Running post processing filter")
                     res = subprocess.call([rexe, '--vanilla', rscript], cwd = simdir)
+                    if res != 0:
+                        if os.path.isfile(os.path.join(results_dir, 'output.nc')):
+                            os.remove(os.path.join(results_dir, 'output.nc'))
+                            self.logger.error('Post Processing filter failed at {0}. Removing output file'.format(results_dir))
             else: 
                 for filename in os.listdir(results_dir):
                     fullname = os.path.join(results_dir, filename)
