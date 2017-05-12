@@ -182,8 +182,8 @@ class Graple:
         count = 0
         jobSuffix = 0
         #build the list of Simxxx dirs to add to the job archives
-        for dir in listdir(self.SimsDir):
-            fqdn = join(self.SimsDir, dir)
+        for directory in listdir(self.SimsDir):
+            fqdn = join(self.SimsDir, directory)
             if isdir(fqdn):
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
