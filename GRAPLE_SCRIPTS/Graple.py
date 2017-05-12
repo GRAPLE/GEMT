@@ -187,11 +187,11 @@ class Graple:
             if isdir(fqdn):
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
-            if count % int(self.CONFIG['SimsPerJob']) == 0:
-                jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
-                self.CreateJob(SimsForJob, jn)
-                jobSuffix += 1
-                SimsForJob = []
+                if count % int(self.CONFIG['SimsPerJob']) == 0:
+                    jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
+                    self.CreateJob(SimsForJob, jn)
+                    jobSuffix += 1
+                    SimsForJob = []
         if len(SimsForJob) > 0:
             jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
             self.CreateJob(SimsForJob, jn)
