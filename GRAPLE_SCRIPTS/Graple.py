@@ -150,12 +150,12 @@ class Graple:
             if isdir(fqdn):
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
-            if count % int(self.CONFIG['SimsPerJob']) == 0:
-                jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
-                self.CreateJob(SimsForJob, jn)
-                self.SubmitAJob(jobSuffix)
-                jobSuffix += 1
-                SimsForJob = []
+                if count % int(self.CONFIG['SimsPerJob']) == 0: # Submit Job Just If It Is a Directory
+                    jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
+                    self.CreateJob(SimsForJob, jn)
+                    self.SubmitAJob(jobSuffix)
+                    jobSuffix += 1
+                    SimsForJob = []
         if len(SimsForJob) > 0:
             jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
             self.CreateJob(SimsForJob, jn)
@@ -182,16 +182,16 @@ class Graple:
         count = 0
         jobSuffix = 0
         #build the list of Simxxx dirs to add to the job archives
-        for dir in listdir(self.SimsDir):
-            fqdn = join(self.SimsDir, dir)
+        for directory in listdir(self.SimsDir):
+            fqdn = join(self.SimsDir, directory)
             if isdir(fqdn):
                 SimsForJob.append(fqdn)
                 count += 1  #count is used to limit how many sims are packed into a job
-            if count % int(self.CONFIG['SimsPerJob']) == 0:
-                jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
-                self.CreateJob(SimsForJob, jn)
-                jobSuffix += 1
-                SimsForJob = []
+                if count % int(self.CONFIG['SimsPerJob']) == 0:
+                    jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
+                    self.CreateJob(SimsForJob, jn)
+                    jobSuffix += 1
+                    SimsForJob = []
         if len(SimsForJob) > 0:
             jn = self.ZipBasename + str(jobSuffix) + '.tar.bz2'
             self.CreateJob(SimsForJob, jn)
