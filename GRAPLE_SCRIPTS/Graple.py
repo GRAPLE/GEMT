@@ -278,64 +278,6 @@ class Graple:
                                 field_modified = " "+field
                             else:
                                 field_modified = field
-                        if (operation == "season"): # could also handle this as var_list[2]
-                            dt = [datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S").date() for date in data['time']]
-                            tt = [dt1.timetuple() for dt1 in dt]
-                            julian = [tt1.tm_yday for tt1 in tt]
-                            seasons = [79, 171, 263, 354] # March, June, September, and December 20th
-                            datamod = []
-                            for j in range(len(julian)):
-                                if (julian[j] < seasons[0]) | (julian[j] > seasons[3]): # it's winter
-                                    datamod.append(data[field_modified][j] + delta + 1)
-                                elif (julian[j] > seasons[1]) & (julian[j] < seasons[2]): # it's spring
-                                    datamod.append(data[field_modified][j] + delta)
-                                elif (julian[j] > seasons[2]) & (julian[j] < seasons[3]): # it's summer
-				    				lower = delta - 1
-				    				if lower < 0:
-										lower = 0
-                                    datamod.append(data[field_modified][j] + lower)
-                                else: # it's fall
-                                    datamod.append(data[field_modified][j] + delta)
-			   				difference = delta - (numpy.mean(data[field_modified]) - numpy.mean(datamod))
-                            data[field_modified] = [x + difference for x in datamod]
-                        elif (operation == "seasonrand"):
-                            dt = [datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S").date() for date in data['time']]
-                            tt = [dt1.timetuple() for dt1 in dt]
-                            julian = [tt1.tm_yday for tt1 in tt]
-                            seasons = [79, 171, 263, 354] # March, June, September, and December 20th
-                            datamod = []
-                            for j in range(len(julian)):
-                                if (julian[j] < seasons[0]) | (julian[j] > seasons[3]): # it's winter
-                                    randadd = numpy.random.randint(delta, delta + 2, 1)[0]
-                                    datamod.append(data[field_modified][j] + randadd)
-                                elif (julian[j] > seasons[1]) & (julian[j] < seasons[2]): # it's spring
-				    				lower = delta - 1
-				    				if lower < 0:
-										lower = 0
-                                    randadd = numpy.random.randint(lower, delta + 1, 1)[0]
-                                    datamod.append(data[field_modified][j] + randadd)
-                                elif (julian[j] > seasons[2]) & (julian[j] < seasons[3]): # it's summer
-				    				lower = delta - 2
-				    				if lower < 0:
-										lower = 0
-                                    randadd = numpy.random.randint(lower, delta, 1)[0]
-                                    datamod.append(data[field_modified][j] + randadd)
-                                else: # it's fall
-				    				lower = delta - 1
-				    				if lower < 0:
-										lower = 0
-                                    randadd = numpy.random.randint(lower, delta + 1, 1)[0]
-                                    datamod.append(data[field_modified][j] + randadd)
-                            difference = delta - (numpy.mean(data[field_modified]) - numpy.mean(datamod))
-                            data[field_modified] = [x + difference for x in datamod]
-                        elif (operation == "rand"):
-                        	lower = delta - 1
-				    		if lower < 0:
-								lower = 0
-                            values = numpy.random.uniform(lower, delta + 1, len(data[field_modified]))
-                            datamod = data[field_modified] + values
-                            difference = delta - (numpy.mean(data[field_modified]) - numpy.mean(datamod))
-                            data[field_modified] = [x + difference for x in datamod]
                         if (operation=="add"):
                             data[field_modified]=data[field_modified].apply(lambda val:val+delta)
                         elif (operation=="sub"):
