@@ -23,7 +23,7 @@ error=Logs/sim{JobNumber}.err
 log=Logs/sim{JobNumber}.log
 request_memory=512M
 requirements=(TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX")
-transfer_input_files=Scratch/job{JobNumber}.tar.bz2, Graple.py
+transfer_input_files=Scratch/job{JobNumber}.tar.bz2, Graple.py, glm.sh
 transfer_output_files=Results.tar.bz2, graple.log
 transfer_output_remaps="Results.tar.bz2=Results/Results{JobNumber}.tar.bz2; graple.log=Logs/graple{JobNumber}.log"
 should_transfer_files=YES
@@ -38,6 +38,7 @@ class Graple:
             'RunR' : 'True',
             'Rmain' : 'PostProcessFilter.R',
             'Rexe' : '/usr/bin/Rscript',
+            'GLMexe' : '/usr/local/bin/glm',
             'LogFile' : 'graple.log',
             'SubmitMode' : 'SingleSubmit',
             'SimRoot' : topdir
@@ -213,7 +214,11 @@ class Graple:
         
     def RunJob(self, simdir):
         rexe = self.CONFIG['Rexe']
-        glm = "/usr/local/bin/glm"
+        uid = os.path.basename(simdir)
+        if os.path.exists(os.path.join(self.top_dir, 'glm.sh')): #Backward Compatibility with GRAPLEr v3.1.0
+            glm = os.path.join(self.top_dir, 'glm.sh')
+        else: #Using Old GRAPLEr v3.1.0
+            glm = self.CONFIG['GLMexe']
         rscript = os.path.join(self.ScriptsDir, self.CONFIG['Rmain'])
         self.logger.info("Running simulation at path %s", simdir)
         if isdir(simdir):
